@@ -107,7 +107,11 @@ function createFeedCard(item) {
   actions.className = "feed-actions";
 
   const link = document.createElement("a");
-  link.href = item.url;
+  const safeUrl =
+    typeof item.url === "string" && /^https?:\/\//i.test(item.url)
+      ? item.url
+      : "#";
+  link.href = safeUrl;
   link.target = "_blank";
   link.rel = "noopener";
   link.className = "button-ghost";
@@ -136,8 +140,10 @@ async function loadFeed() {
       fetchJSON("/api/twitter"),
     ]);
 
-    // Expect arrays from both endpoints
-    const combined = [...yt, ...tw].sort(
+    const ytItems = Array.isArray(yt) ? yt : [];
+    const twItems = Array.isArray(tw) ? tw : [];
+
+    const combined = [...ytItems, ...twItems].sort(
       (a, b) => new Date(b.publishedAt) - new Date(a.publishedAt)
     );
 
