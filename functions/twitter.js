@@ -6,8 +6,12 @@ const DEFAULT_HOSTS = [
   "https://nitter.privacyredirect.com",
   "https://nitter.net",
   "https://nitter.fly.dev",
+  "https://nitter.woodland.cafe",
+  "https://nitter.1d4.us",
+  "https://nitter.sneed.network",
+  "https://nitter.d420.de",
 ];
-const CACHE_VERSION = "v2";
+const CACHE_VERSION = "v3";
 
 const toCanonicalTweetUrl = (url) => {
   try {
@@ -100,10 +104,18 @@ export async function onRequest(context) {
     }
 
     try {
-      const res = await fetch(feedUrl);
+      const res = await fetch(feedUrl, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (FeedFetcher; +https://envy.xx.kg)",
+        },
+      });
       if (!res.ok) continue;
       const bodyText = await res.text();
       const rawItems = parseFeedBody(bodyText);
+
+      if (!rawItems.length) {
+        continue;
+      }
 
       const items = rawItems.map((tweet) => {
         const title =
