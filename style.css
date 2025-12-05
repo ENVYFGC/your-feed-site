@@ -152,7 +152,7 @@ main {
 .feed-list {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 20px;
 }
 
 /* Feed card */
@@ -269,6 +269,51 @@ main {
 
 .feed-embed--tweet {
   min-height: 420px;
+}
+
+.feed-group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: rgba(12, 12, 20, 0.6);
+}
+
+.feed-group__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.feed-group__title {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.feed-group__count {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.feed-group__controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.feed-group__page {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.feed-group__list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .button-ghost {
