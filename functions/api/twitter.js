@@ -260,7 +260,7 @@ export async function onRequest(context) {
             thumbnail,
             publishedAt,
           };
-        });
+        }).sort((a, b) => new Date(b.publishedAt || 0) - new Date(a.publishedAt || 0));
 
         const response = new Response(JSON.stringify(items), {
           status: 200,
