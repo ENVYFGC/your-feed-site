@@ -11,7 +11,7 @@ const DEFAULT_HOSTS = [
   "https://nitter.sneed.network",
   "https://nitter.d420.de",
 ];
-const CACHE_VERSION = "v3";
+const CACHE_VERSION = "v4";
 
 const toCanonicalTweetUrl = (url) => {
   try {
@@ -78,6 +78,28 @@ function parseFeedBody(body) {
   return items;
 }
 
+async function fetchWithFallback(url) {
+  const targets = [url];
+  const stripped = url.replace(/^https?:\/\//, "");
+  targets.push(`https://r.jina.ai/http://${stripped}`);
+
+  for (const target of targets) {
+    try {
+      const res = await fetch(target, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (FeedFetcher; +https://envy.xx.kg)",
+        },
+      });
+      if (!res.ok) continue;
+      const text = await res.text();
+      if (text) return text;
+    } catch {
+      continue;
+    }
+  }
+  return "";
+}
+
 export async function onRequest(context) {
   const handle = context?.env?.TWITTER_HANDLE || DEFAULT_HANDLE;
   const hostList =
@@ -104,13 +126,8 @@ export async function onRequest(context) {
     }
 
     try {
-      const res = await fetch(feedUrl, {
-        headers: {
-          "User-Agent": "Mozilla/5.0 (FeedFetcher; +https://envy.xx.kg)",
-        },
-      });
-      if (!res.ok) continue;
-      const bodyText = await res.text();
+      const bodyText = await fetchWithFallback(feedUrl);
+      if (!bodyText) continue;
       const rawItems = parseFeedBody(bodyText);
 
       if (!rawItems.length) {
