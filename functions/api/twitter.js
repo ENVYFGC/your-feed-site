@@ -7,6 +7,7 @@ const DEFAULT_HOSTS = [
   "https://nitter.net",
   "https://nitter.fly.dev",
 ];
+const CACHE_VERSION = "v2";
 
 const toCanonicalTweetUrl = (url) => {
   try {
@@ -92,7 +93,7 @@ export async function onRequest(context) {
 
   for (const feedUrl of feedUrls) {
     const cacheKey = new Request(
-      `https://feed.local/twitter?src=${encodeURIComponent(feedUrl)}`
+      `https://feed.local/twitter/${CACHE_VERSION}?src=${encodeURIComponent(feedUrl)}`
     );
     const cached = await cache.match(cacheKey);
     if (cached) {
@@ -152,7 +153,7 @@ export async function onRequest(context) {
         status: 200,
         headers: {
           "Content-Type": "application/json; charset=utf-8",
-          "Cache-Control": "public, max-age=900",
+          "Cache-Control": "public, max-age=600",
         },
       });
 
