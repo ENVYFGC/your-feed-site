@@ -106,15 +106,28 @@ async function fetchWithFallback(url) {
 function parseStatusLinksFromPage(bodyText, root, handle) {
   const items = [];
   const seen = new Set();
-  const re = /https?:\/\/[^"'\s]+\/status\/\d+/gi;
+  const re = /https?:\/\/[^)\s"'<>]+\/status\/\d+/gi;
   const matches = bodyText.match(re) || [];
   for (const m of matches) {
-    if (seen.has(m)) continue;
-    seen.add(m);
+    let candidate = m;
+    candidate = candidate.replace(/\)\]$/, "");
+    try {
+      const u = new URL(candidate);
+      u.protocol = "https:";
+      if (u.hostname.includes("nitter")) {
+        u.hostname = "x.com";
+      }
+      u.hash = "";
+      candidate = u.href;
+    } catch {
+      // keep as-is
+    }
+    if (seen.has(candidate)) continue;
+    seen.add(candidate);
     items.push({
       title: `Post by @${handle}`,
       description: "",
-      url: m.replace(/#.*/, ""),
+      url: candidate.replace(/#.*/, ""),
       publishedAt: "",
       thumbnail: null,
     });
