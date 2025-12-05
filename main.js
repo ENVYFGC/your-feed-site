@@ -4,7 +4,10 @@ const FEED_LOADING = document.getElementById("feed-loading");
 const FEED_ERROR = document.getElementById("feed-error");
 
 // Set footer year
-document.getElementById("year").textContent = new Date().getFullYear();
+const yearEl = document.getElementById("year");
+if (yearEl) {
+  yearEl.textContent = new Date().getFullYear();
+}
 
 const PAGE_SIZE = 10;
 const GAME_KEYWORDS = [
