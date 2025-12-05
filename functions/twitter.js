@@ -123,6 +123,26 @@ function parseStatusLinksFromPage(bodyText, root, handle) {
   return items;
 }
 
+function fallbackResponse(handle, reason = "") {
+  const fallback = [
+    {
+      source: "twitter",
+      title: "Twitter feed unavailable",
+      description:
+        reason ||
+        "Upstream Nitter mirrors are unavailable right now. Check back later or open the profile directly.",
+      url: `https://x.com/${handle}`,
+      thumbnail: null,
+      publishedAt: new Date().toISOString(),
+    },
+  ];
+
+  return new Response(JSON.stringify(fallback), {
+    status: 200,
+    headers: { "Content-Type": "application/json; charset=utf-8" },
+  });
+}
+
 export async function onRequest(context) {
   try {
     const handle = context?.env?.TWITTER_HANDLE || DEFAULT_HANDLE;
@@ -250,26 +270,12 @@ export async function onRequest(context) {
       }
     }
 
-    const fallback = [
-      {
-        source: "twitter",
-        title: `Twitter feed unavailable`,
-        description:
-          "Upstream Nitter mirrors are unavailable right now. Check back later or open the profile directly.",
-        url: `https://x.com/${handle}`,
-        thumbnail: null,
-        publishedAt: new Date().toISOString(),
-      },
-    ];
-
-    return new Response(JSON.stringify(fallback), {
-      status: 200,
-      headers: { "Content-Type": "application/json; charset=utf-8" },
-    });
+    return fallbackResponse(
+      handle,
+      "Could not fetch from any Nitter mirror; using profile link instead."
+    );
   } catch {
-    return new Response("[]", {
-      status: 200,
-      headers: { "Content-Type": "application/json; charset=utf-8" },
-    });
+    const handle = context?.env?.TWITTER_HANDLE || DEFAULT_HANDLE;
+    return fallbackResponse(handle, "Feed fetch error; showing profile link.");
   }
 }
