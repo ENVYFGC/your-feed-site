@@ -108,12 +108,12 @@ async function fetchWithFallback(url) {
 function parseStatusLinksFromPage(bodyText, root, handle) {
   const items = [];
   const seen = new Set();
-  const re = /https?:\/\/[^)\s"'<>]+\/status\/\d+/gi;
+  const re = /https?:\/\/[^\s"'<>]*\/status\/\d+/gi;
   const matches = bodyText.match(re) || [];
   for (const m of matches) {
     let candidate = m;
-    // Drop trailing markdown artifacts
-    candidate = candidate.replace(/\)\]$/, "");
+    if (candidate.includes("/pic/")) continue;
+    candidate = candidate.replace(/\)\]?$/, "");
     try {
       const u = new URL(candidate);
       u.protocol = "https:";
