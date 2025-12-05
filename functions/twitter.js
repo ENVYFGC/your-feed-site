@@ -15,7 +15,7 @@ const DEFAULT_HOSTS = [
   "https://nitter.nohost.network",
   "https://nitter.privacydev.net",
 ];
-const CACHE_VERSION = "v5";
+const CACHE_VERSION = "v6";
 
 const toCanonicalTweetUrl = (url) => {
   try {
@@ -122,6 +122,9 @@ function parseStatusLinksFromPage(bodyText, root, handle) {
       candidate = u.href;
     } catch {
       // keep as-is
+    }
+    if (!/^https?:\/\/(www\.)?(x|twitter)\.com\/.+\/status\/\d+/i.test(candidate)) {
+      continue;
     }
     if (seen.has(candidate)) continue;
     seen.add(candidate);
