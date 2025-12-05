@@ -321,6 +321,12 @@ function renderGroups() {
     group.page = Math.min(group.page, pageCount - 1);
     const currentPage = group.page;
 
+    const pageLabel = document.createElement("span");
+    pageLabel.className = "feed-group__page";
+    pageLabel.textContent = `Page ${currentPage + 1} / ${pageCount}`;
+
+    controls.appendChild(pageLabel);
+
     if (pageCount > 1) {
       const prev = document.createElement("button");
       prev.className = "button-ghost";
@@ -343,12 +349,7 @@ function renderGroups() {
         renderGroups();
       });
 
-      const pageLabel = document.createElement("span");
-      pageLabel.className = "feed-group__page";
-      pageLabel.textContent = `Page ${currentPage + 1} / ${pageCount}`;
-
       controls.appendChild(prev);
-      controls.appendChild(pageLabel);
       controls.appendChild(next);
     }
 

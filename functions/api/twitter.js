@@ -21,6 +21,7 @@ const toCanonicalTweetUrl = (url) => {
     if (!host.endsWith("twitter.com") && !host.endsWith("x.com")) {
       return "";
     }
+    u.hash = "";
     return u.href;
   } catch {
     return "";
@@ -113,12 +114,13 @@ export async function onRequest(context) {
           (tweet.description || "").slice(0, 80) ||
           "Tweet";
 
-        const description =
+        const rawDesc =
           tweet.text ||
           tweet.description ||
           tweet.content ||
           tweet.summary ||
           "";
+        const description = rawDesc.replace(/]]>/g, "").trim();
 
         const rawUrl = tweet.url || tweet.link || tweet.permalink || "";
         const url = toCanonicalTweetUrl(rawUrl) || rawUrl;
