@@ -2,21 +2,12 @@
 // Fetch Twitter/X feed via Nitter (fallback hosts, JSON or RSS). Returns list.
 
 const DEFAULT_HANDLE = "envy_fgc";
-const DEFAULT_QUERY = "from:envy_fgc (#GGST_SO OR #GGST) -filter:replies";
 const DEFAULT_HOSTS = [
   "https://nitter.privacyredirect.com",
   "https://nitter.net",
   "https://nitter.fly.dev",
-  "https://nitter.woodland.cafe",
-  "https://nitter.1d4.us",
-  "https://nitter.sneed.network",
-  "https://nitter.d420.de",
-  "https://nitter.cz",
-  "https://nitter.kavin.rocks",
-  "https://nitter.nohost.network",
-  "https://nitter.privacydev.net",
 ];
-const CACHE_VERSION = "v6";
+const CACHE_VERSION = "v2";
 
 const toCanonicalTweetUrl = (url) => {
   try {
@@ -30,7 +21,6 @@ const toCanonicalTweetUrl = (url) => {
     if (!host.endsWith("twitter.com") && !host.endsWith("x.com")) {
       return "";
     }
-    u.hash = "";
     return u.href;
   } catch {
     return "";
@@ -85,240 +75,97 @@ function parseFeedBody(body) {
   return items;
 }
 
-async function fetchWithFallback(url) {
-  const targets = [url];
-  const stripped = url.replace(/^https?:\/\//, "");
-  targets.push(`https://r.jina.ai/http://${stripped}`);
+export async function onRequest(context) {
+  const handle = context?.env?.TWITTER_HANDLE || DEFAULT_HANDLE;
+  const hostList =
+    (context?.env?.NITTER_HOSTS &&
+      context.env.NITTER_HOSTS.split(",").map((s) => s.trim()).filter(Boolean)) ||
+    DEFAULT_HOSTS;
 
-  for (const target of targets) {
+  const feedUrls = [];
+  hostList.forEach((base) => {
+    const root = base.replace(/\/+$/, "");
+    feedUrls.push(`${root}/${handle}/rss?format=json`);
+    feedUrls.push(`${root}/${handle}/rss`);
+  });
+
+  const cache = caches.default;
+
+  for (const feedUrl of feedUrls) {
+    const cacheKey = new Request(
+      `https://feed.local/twitter/${CACHE_VERSION}?src=${encodeURIComponent(feedUrl)}`
+    );
+    const cached = await cache.match(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
     try {
-      const res = await fetch(target, {
+      const res = await fetch(feedUrl);
+      if (!res.ok) continue;
+      const bodyText = await res.text();
+      const rawItems = parseFeedBody(bodyText);
+
+      const items = rawItems.map((tweet) => {
+        const title =
+          tweet.title ||
+          tweet.text ||
+          (tweet.description || "").slice(0, 80) ||
+          "Tweet";
+
+        const description =
+          tweet.text ||
+          tweet.description ||
+          tweet.content ||
+          tweet.summary ||
+          "";
+
+        const rawUrl = tweet.url || tweet.link || tweet.permalink || "";
+        const url = toCanonicalTweetUrl(rawUrl) || rawUrl;
+
+        const publishedAt =
+          tweet.published ||
+          tweet.pubDate ||
+          tweet.date ||
+          tweet.created_at ||
+          tweet.publishedAt ||
+          tweet.updated ||
+          "";
+
+        const thumbnail =
+          tweet.thumbnail ||
+          tweet.image ||
+          (tweet.enclosure && tweet.enclosure.url) ||
+          tweet.media ||
+          null;
+
+        return {
+          source: "twitter",
+          title,
+          description,
+          url,
+          thumbnail,
+          publishedAt,
+        };
+      });
+
+      const response = new Response(JSON.stringify(items), {
+        status: 200,
         headers: {
-          "User-Agent": "Mozilla/5.0 (FeedFetcher; +https://envy.xx.kg)",
+          "Content-Type": "application/json; charset=utf-8",
+          "Cache-Control": "public, max-age=600",
         },
       });
-      const text = await res.text();
-      if (text && text.length) return text;
+
+      await cache.put(cacheKey, response.clone());
+      return response;
     } catch {
       continue;
     }
   }
-  return "";
-}
 
-function parseStatusLinksFromPage(bodyText, root, handle) {
-  const items = [];
-  const seen = new Set();
-  const re = /https?:\/\/[^\s"'<>]*\/status\/\d+/gi;
-  const matches = bodyText.match(re) || [];
-  for (const m of matches) {
-    let candidate = m;
-    if (candidate.includes("/pic/")) continue;
-    candidate = candidate.replace(/\)\]?$/, "");
-    try {
-      const u = new URL(candidate);
-      u.protocol = "https:";
-      if (u.hostname.includes("nitter")) {
-        u.hostname = "x.com";
-      }
-      u.hash = "";
-      candidate = u.href;
-    } catch {
-      // keep as-is
-    }
-    if (!/^https?:\/\/(www\.)?(x|twitter)\.com\/.+\/status\/\d+/i.test(candidate)) {
-      continue;
-    }
-    if (seen.has(candidate)) continue;
-    seen.add(candidate);
-    items.push({
-      title: `Post by @${handle}`,
-      description: "",
-      url: candidate.replace(/#.*/, ""),
-      publishedAt: "",
-      thumbnail: null,
-    });
-    if (items.length >= 30) break;
-  }
-  return items;
-}
-
-function fallbackResponse(handle, reason = "") {
-  const fallback = [
-    {
-      source: "twitter",
-      title: "Twitter feed unavailable",
-      description:
-        reason ||
-        "Upstream Nitter mirrors are unavailable right now. Check back later or open the profile directly.",
-      url: `https://x.com/${handle}`,
-      thumbnail: null,
-      publishedAt: new Date().toISOString(),
-    },
-  ];
-
-  return new Response(JSON.stringify(fallback), {
+  return new Response("[]", {
     status: 200,
     headers: { "Content-Type": "application/json; charset=utf-8" },
   });
-}
-
-export async function onRequest(context) {
-  try {
-    const handle = context?.env?.TWITTER_HANDLE || DEFAULT_HANDLE;
-    const query =
-      context?.env?.TWITTER_QUERY && context.env.TWITTER_QUERY.trim().length
-        ? context.env.TWITTER_QUERY.trim()
-        : DEFAULT_QUERY;
-    const hostList =
-      (context?.env?.NITTER_HOSTS &&
-        context.env.NITTER_HOSTS.split(",").map((s) => s.trim()).filter(Boolean)) ||
-      DEFAULT_HOSTS;
-
-    const feedUrls = [];
-    hostList.forEach((base) => {
-      const root = base.replace(/\/+$/, "");
-      feedUrls.push(`${root}/${handle}/rss?format=json`);
-      feedUrls.push(`${root}/${handle}/rss`);
-      feedUrls.push(`${root}/${handle}`);
-      const q = encodeURIComponent(query);
-      feedUrls.push(`${root}/search/rss?f=tweets&q=${q}`);
-      feedUrls.push(`${root}/search/rss?format=json&f=tweets&q=${q}`);
-    });
-
-    const cache = typeof caches !== "undefined" ? caches.default : null;
-    const getCached = async (key) => {
-      if (!cache) return null;
-      try {
-        return await cache.match(key);
-      } catch {
-        return null;
-      }
-    };
-    const putCached = async (key, response) => {
-      if (!cache) return;
-      try {
-        await cache.put(key, response.clone());
-      } catch {
-        // ignore cache write errors
-      }
-    };
-
-    for (const feedUrl of feedUrls) {
-      const cacheKey = new Request(
-        `https://feed.local/twitter/${CACHE_VERSION}?src=${encodeURIComponent(feedUrl)}`
-      );
-      const cached = await getCached(cacheKey);
-      if (cached) {
-        return cached;
-      }
-
-      try {
-        const bodyText = await fetchWithFallback(feedUrl);
-        if (!bodyText) continue;
-        const rawItems = parseFeedBody(bodyText);
-
-        if (!rawItems.length) {
-          const scraped = parseStatusLinksFromPage(bodyText, feedUrl, handle);
-          if (!scraped.length) {
-            continue;
-          }
-          const response = new Response(JSON.stringify(scraped), {
-            status: 200,
-            headers: {
-              "Content-Type": "application/json; charset=utf-8",
-              "Cache-Control": "public, max-age=600",
-            },
-          });
-          await putCached(cacheKey, response);
-          return response;
-        }
-
-        const items = rawItems.map((tweet) => {
-          const title =
-            tweet.title ||
-            tweet.text ||
-            (tweet.description || "").slice(0, 80) ||
-            "Tweet";
-
-          const rawDesc =
-            tweet.text ||
-            tweet.description ||
-            tweet.content ||
-            tweet.summary ||
-            "";
-          const description = rawDesc.replace(/]]>/g, "").trim();
-
-          const rawUrl = tweet.url || tweet.link || tweet.permalink || "";
-          const url = toCanonicalTweetUrl(rawUrl) || rawUrl;
-
-          const publishedAt =
-            tweet.published ||
-            tweet.pubDate ||
-            tweet.date ||
-            tweet.created_at ||
-            tweet.publishedAt ||
-            tweet.updated ||
-            "";
-
-          const thumbnail =
-            tweet.thumbnail ||
-            tweet.image ||
-            (tweet.enclosure && tweet.enclosure.url) ||
-            tweet.media ||
-            null;
-
-          return {
-            source: "twitter",
-            title,
-            description,
-            url,
-            thumbnail,
-            publishedAt,
-          };
-        }).sort((a, b) => new Date(b.publishedAt || 0) - new Date(a.publishedAt || 0));
-
-        const response = new Response(JSON.stringify(items), {
-          status: 200,
-          headers: {
-            "Content-Type": "application/json; charset=utf-8",
-            "Cache-Control": "public, max-age=600",
-          },
-        });
-
-        await putCached(cacheKey, response);
-        return response;
-      } catch {
-        // try next URL
-      }
-
-      if (!feedUrl.endsWith("/rss") && !feedUrl.includes("/rss?")) {
-        try {
-          const pageText = await fetchWithFallback(feedUrl);
-          const scraped = parseStatusLinksFromPage(pageText, feedUrl, handle);
-          if (scraped.length) {
-            const response = new Response(JSON.stringify(scraped), {
-              status: 200,
-              headers: {
-                "Content-Type": "application/json; charset=utf-8",
-                "Cache-Control": "public, max-age=600",
-              },
-            });
-            await putCached(cacheKey, response);
-            return response;
-          }
-        } catch {
-          // ignore
-        }
-      }
-    }
-
-    return fallbackResponse(
-      handle,
-      "Could not fetch from any Nitter mirror; using profile link instead."
-    );
-  } catch {
-    const handle = context?.env?.TWITTER_HANDLE || DEFAULT_HANDLE;
-    return fallbackResponse(handle, "Feed fetch error; showing profile link.");
-  }
 }
