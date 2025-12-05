@@ -9,7 +9,7 @@ if (yearEl) {
   yearEl.textContent = new Date().getFullYear();
 }
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE = 15;
 const GAME_KEYWORDS = [
   {
     key: "ggst",

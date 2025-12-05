@@ -19,40 +19,55 @@ async function fetchUploadsPlaylistId(channelId, apiKey) {
 }
 
 async function fetchPlaylistItems(playlistId, apiKey) {
-  const url = new URL("https://www.googleapis.com/youtube/v3/playlistItems");
-  url.searchParams.set("part", "snippet,contentDetails");
-  url.searchParams.set("playlistId", playlistId);
-  url.searchParams.set("maxResults", "50");
-  url.searchParams.set("key", apiKey);
+  const results = [];
+  let pageToken = "";
+  let guard = 0;
+  while (guard < 20) {
+    guard += 1;
+    const url = new URL("https://www.googleapis.com/youtube/v3/playlistItems");
+    url.searchParams.set("part", "snippet,contentDetails");
+    url.searchParams.set("playlistId", playlistId);
+    url.searchParams.set("maxResults", "50");
+    url.searchParams.set("key", apiKey);
+    if (pageToken) url.searchParams.set("pageToken", pageToken);
 
-  const res = await fetch(url.toString());
-  if (!res.ok) throw new Error("playlistItems request failed");
-  const data = await res.json();
-  const items = Array.isArray(data?.items) ? data.items : [];
+    const res = await fetch(url.toString());
+    if (!res.ok) throw new Error("playlistItems request failed");
+    const data = await res.json();
+    const items = Array.isArray(data?.items) ? data.items : [];
 
-  return items.map((item) => {
-    const snippet = item.snippet || {};
-    const details = item.contentDetails || {};
-    const thumbs = snippet.thumbnails || {};
-    const videoId =
-      snippet.resourceId?.videoId || details.videoId || snippet.videoId || "";
-    const url = videoId ? `https://www.youtube.com/watch?v=${videoId}` : "";
-    const thumbnail =
-      thumbs.maxres?.url ||
-      thumbs.standard?.url ||
-      thumbs.high?.url ||
-      thumbs.medium?.url ||
-      thumbs.default?.url ||
-      null;
-    return {
-      source: "youtube",
-      title: snippet.title || "Untitled",
-      description: snippet.description || "",
-      url,
-      thumbnail,
-      publishedAt: details.videoPublishedAt || snippet.publishedAt || "",
-    };
-  });
+    items.forEach((item) => {
+      const snippet = item.snippet || {};
+      const details = item.contentDetails || {};
+      const thumbs = snippet.thumbnails || {};
+      const videoId =
+        snippet.resourceId?.videoId ||
+        details.videoId ||
+        snippet.videoId ||
+        "";
+      const url = videoId ? `https://www.youtube.com/watch?v=${videoId}` : "";
+      const thumbnail =
+        thumbs.maxres?.url ||
+        thumbs.standard?.url ||
+        thumbs.high?.url ||
+        thumbs.medium?.url ||
+        thumbs.default?.url ||
+        null;
+      results.push({
+        source: "youtube",
+        title: snippet.title || "Untitled",
+        description: snippet.description || "",
+        url,
+        thumbnail,
+        publishedAt: details.videoPublishedAt || snippet.publishedAt || "",
+      });
+    });
+
+    pageToken = data.nextPageToken || "";
+    if (!pageToken) break;
+  }
+
+  return results;
 }
 
 function parseRss(text) {
