@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Your Name – Video Feed</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="container header-inner">
+      <div class="brand">
+        <div class="avatar-placeholder">Y</div>
+        <div>
+          <h1>Your Name</h1>
+          <p>Video feed from YouTube & X (Twitter)</p>
+        </div>
+      </div>
+      <nav class="header-links">
+        <a href="https://youtube.com/@YOUR_CHANNEL_HANDLE" target="_blank" rel="noopener">YouTube</a>
+        <a href="https://x.com/YOUR_TWITTER_USERNAME" target="_blank" rel="noopener">X / Twitter</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <section id="feed">
+      <div id="feed-loading" class="feed-message">Loading your latest videos…</div>
+      <div id="feed-error" class="feed-message feed-message--error" hidden>
+        Couldn’t load the feed. Please try again later.
+      </div>
+      <div id="feed-list" class="feed-list"></div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <p>© <span id="year"></span> Your Name · Powered by YouTube & X</p>
+    </div>
+  </footer>
+
+  <script src="/main.js" type="module"></script>
+</body>
+</html>
