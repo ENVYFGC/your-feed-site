@@ -268,7 +268,11 @@ main {
 }
 
 .feed-embed--tweet {
-  min-height: 420px;
+  min-height: 520px;
+}
+
+.feed-embed--tweet iframe {
+  height: 520px;
 }
 
 .feed-group {
