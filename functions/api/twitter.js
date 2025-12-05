@@ -186,13 +186,29 @@ export async function onRequest(context) {
       feedUrls.push(`${root}/search/rss?format=json&f=tweets&q=${q}`);
     });
 
-    const cache = caches.default;
+    const cache = typeof caches !== "undefined" ? caches.default : null;
+    const getCached = async (key) => {
+      if (!cache) return null;
+      try {
+        return await cache.match(key);
+      } catch {
+        return null;
+      }
+    };
+    const putCached = async (key, response) => {
+      if (!cache) return;
+      try {
+        await cache.put(key, response.clone());
+      } catch {
+        // ignore cache write errors
+      }
+    };
 
     for (const feedUrl of feedUrls) {
       const cacheKey = new Request(
         `https://feed.local/twitter/${CACHE_VERSION}?src=${encodeURIComponent(feedUrl)}`
       );
-      const cached = await cache.match(cacheKey);
+      const cached = await getCached(cacheKey);
       if (cached) {
         return cached;
       }
@@ -214,7 +230,7 @@ export async function onRequest(context) {
               "Cache-Control": "public, max-age=600",
             },
           });
-          await cache.put(cacheKey, response.clone());
+          await putCached(cacheKey, response);
           return response;
         }
 
@@ -270,7 +286,7 @@ export async function onRequest(context) {
           },
         });
 
-        await cache.put(cacheKey, response.clone());
+        await putCached(cacheKey, response);
         return response;
       } catch {
         // try next URL
@@ -288,7 +304,7 @@ export async function onRequest(context) {
                 "Cache-Control": "public, max-age=600",
               },
             });
-            await cache.put(cacheKey, response.clone());
+            await putCached(cacheKey, response);
             return response;
           }
         } catch {
