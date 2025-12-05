@@ -123,122 +123,141 @@ function parseStatusLinksFromPage(bodyText, root, handle) {
 }
 
 export async function onRequest(context) {
-  const handle = context?.env?.TWITTER_HANDLE || DEFAULT_HANDLE;
-  const hostList =
-    (context?.env?.NITTER_HOSTS &&
-      context.env.NITTER_HOSTS.split(",").map((s) => s.trim()).filter(Boolean)) ||
-    DEFAULT_HOSTS;
+  try {
+    const handle = context?.env?.TWITTER_HANDLE || DEFAULT_HANDLE;
+    const hostList =
+      (context?.env?.NITTER_HOSTS &&
+        context.env.NITTER_HOSTS.split(",").map((s) => s.trim()).filter(Boolean)) ||
+      DEFAULT_HOSTS;
 
-  const feedUrls = [];
-  hostList.forEach((base) => {
-    const root = base.replace(/\/+$/, "");
-    feedUrls.push(`${root}/${handle}/rss?format=json`);
-    feedUrls.push(`${root}/${handle}/rss`);
-    feedUrls.push(`${root}/${handle}`);
-  });
+    const feedUrls = [];
+    hostList.forEach((base) => {
+      const root = base.replace(/\/+$/, "");
+      feedUrls.push(`${root}/${handle}/rss?format=json`);
+      feedUrls.push(`${root}/${handle}/rss`);
+      feedUrls.push(`${root}/${handle}`);
+    });
 
-  const cache = caches.default;
+    const cache = caches.default;
 
-  for (const feedUrl of feedUrls) {
-    const cacheKey = new Request(
-      `https://feed.local/twitter/${CACHE_VERSION}?src=${encodeURIComponent(feedUrl)}`
-    );
-    const cached = await cache.match(cacheKey);
-    if (cached) {
-      return cached;
-    }
-
-    try {
-      const bodyText = await fetchWithFallback(feedUrl);
-      if (!bodyText) continue;
-      const rawItems = parseFeedBody(bodyText);
-
-      if (!rawItems.length) {
-        continue;
+    for (const feedUrl of feedUrls) {
+      const cacheKey = new Request(
+        `https://feed.local/twitter/${CACHE_VERSION}?src=${encodeURIComponent(feedUrl)}`
+      );
+      const cached = await cache.match(cacheKey);
+      if (cached) {
+        return cached;
       }
 
-      const items = rawItems.map((tweet) => {
-        const title =
-          tweet.title ||
-          tweet.text ||
-          (tweet.description || "").slice(0, 80) ||
-          "Tweet";
-
-        const rawDesc =
-          tweet.text ||
-          tweet.description ||
-          tweet.content ||
-          tweet.summary ||
-          "";
-        const description = rawDesc.replace(/]]>/g, "").trim();
-
-        const rawUrl = tweet.url || tweet.link || tweet.permalink || "";
-        const url = toCanonicalTweetUrl(rawUrl) || rawUrl;
-
-        const publishedAt =
-          tweet.published ||
-          tweet.pubDate ||
-          tweet.date ||
-          tweet.created_at ||
-          tweet.publishedAt ||
-          tweet.updated ||
-          "";
-
-        const thumbnail =
-          tweet.thumbnail ||
-          tweet.image ||
-          (tweet.enclosure && tweet.enclosure.url) ||
-          tweet.media ||
-          null;
-
-        return {
-          source: "twitter",
-          title,
-          description,
-          url,
-          thumbnail,
-          publishedAt,
-        };
-      });
-
-      const response = new Response(JSON.stringify(items), {
-        status: 200,
-        headers: {
-          "Content-Type": "application/json; charset=utf-8",
-          "Cache-Control": "public, max-age=600",
-        },
-      });
-
-      await cache.put(cacheKey, response.clone());
-      return response;
-    } catch {
-      // try next URL
-    }
-
-    // If we tried the HTML page (no /rss) and still no items, attempt to scrape status links
-    if (!feedUrl.endsWith("/rss") && !feedUrl.includes("/rss?")) {
       try {
-        const pageText = await fetchWithFallback(feedUrl);
-        const scraped = parseStatusLinksFromPage(pageText, feedUrl, handle);
-        if (scraped.length) {
-          const response = new Response(JSON.stringify(scraped), {
-            status: 200,
-            headers: {
-              "Content-Type": "application/json; charset=utf-8",
-              "Cache-Control": "public, max-age=600",
-            },
-          });
-          await cache.put(cacheKey, response.clone());
-          return response;
+        const bodyText = await fetchWithFallback(feedUrl);
+        if (!bodyText) continue;
+        const rawItems = parseFeedBody(bodyText);
+
+        if (!rawItems.length) {
+          continue;
         }
+
+        const items = rawItems.map((tweet) => {
+          const title =
+            tweet.title ||
+            tweet.text ||
+            (tweet.description || "").slice(0, 80) ||
+            "Tweet";
+
+          const rawDesc =
+            tweet.text ||
+            tweet.description ||
+            tweet.content ||
+            tweet.summary ||
+            "";
+          const description = rawDesc.replace(/]]>/g, "").trim();
+
+          const rawUrl = tweet.url || tweet.link || tweet.permalink || "";
+          const url = toCanonicalTweetUrl(rawUrl) || rawUrl;
+
+          const publishedAt =
+            tweet.published ||
+            tweet.pubDate ||
+            tweet.date ||
+            tweet.created_at ||
+            tweet.publishedAt ||
+            tweet.updated ||
+            "";
+
+          const thumbnail =
+            tweet.thumbnail ||
+            tweet.image ||
+            (tweet.enclosure && tweet.enclosure.url) ||
+            tweet.media ||
+            null;
+
+          return {
+            source: "twitter",
+            title,
+            description,
+            url,
+            thumbnail,
+            publishedAt,
+          };
+        });
+
+        const response = new Response(JSON.stringify(items), {
+          status: 200,
+          headers: {
+            "Content-Type": "application/json; charset=utf-8",
+            "Cache-Control": "public, max-age=600",
+          },
+        });
+
+        await cache.put(cacheKey, response.clone());
+        return response;
       } catch {
-        // ignore
+        // try next URL
+      }
+
+      if (!feedUrl.endsWith("/rss") && !feedUrl.includes("/rss?")) {
+        try {
+          const pageText = await fetchWithFallback(feedUrl);
+          const scraped = parseStatusLinksFromPage(pageText, feedUrl, handle);
+          if (scraped.length) {
+            const response = new Response(JSON.stringify(scraped), {
+              status: 200,
+              headers: {
+                "Content-Type": "application/json; charset=utf-8",
+                "Cache-Control": "public, max-age=600",
+              },
+            });
+            await cache.put(cacheKey, response.clone());
+            return response;
+          }
+        } catch {
+          // ignore
+        }
       }
     }
-  }
 
-  return new Response("[]", {
-    status: 200,
-    headers: { "Content-Type": "application/json; charset=utf-8" },
-  });
+    // Last resort: return a placeholder so UI isn't empty
+    const fallback = [
+      {
+        source: "twitter",
+        title: `Twitter feed unavailable`,
+        description:
+          "Upstream Nitter mirrors are unavailable right now. Check back later or click to open the profile directly.",
+        url: `https://x.com/${handle}`,
+        thumbnail: null,
+        publishedAt: new Date().toISOString(),
+      },
+    ];
+
+    return new Response(JSON.stringify(fallback), {
+      status: 200,
+      headers: { "Content-Type": "application/json; charset=utf-8" },
+    });
+  } catch {
+    return new Response("[]", {
+      status: 200,
+      headers: { "Content-Type": "application/json; charset=utf-8" },
+    });
+  }
 }
