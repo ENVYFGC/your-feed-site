@@ -2,6 +2,8 @@
 // Fetch Twitter/X feed via Nitter (fallback hosts, JSON or RSS). Returns list.
 
 const DEFAULT_HANDLE = "envy_fgc";
+const DEFAULT_QUERY =
+  "from:envy_fgc (#GGST_SO OR #GGST OR #UNI2 OR #UnderNight) -filter:replies";
 const DEFAULT_HOSTS = [
   "https://nitter.privacyredirect.com",
   "https://nitter.net",
@@ -165,6 +167,10 @@ function fallbackResponse(handle, reason = "") {
 export async function onRequest(context) {
   try {
     const handle = context?.env?.TWITTER_HANDLE || DEFAULT_HANDLE;
+    const query =
+      context?.env?.TWITTER_QUERY && context.env.TWITTER_QUERY.trim().length
+        ? context.env.TWITTER_QUERY.trim()
+        : DEFAULT_QUERY;
     const hostList =
       (context?.env?.NITTER_HOSTS &&
         context.env.NITTER_HOSTS.split(",").map((s) => s.trim()).filter(Boolean)) ||
@@ -176,6 +182,9 @@ export async function onRequest(context) {
       feedUrls.push(`${root}/${handle}/rss?format=json`);
       feedUrls.push(`${root}/${handle}/rss`);
       feedUrls.push(`${root}/${handle}`);
+      const q = encodeURIComponent(query);
+      feedUrls.push(`${root}/search/rss?f=tweets&q=${q}`);
+      feedUrls.push(`${root}/search/rss?format=json&f=tweets&q=${q}`);
     });
 
     const cache = caches.default;
