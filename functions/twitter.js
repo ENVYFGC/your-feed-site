@@ -100,6 +100,26 @@ async function fetchWithFallback(url) {
   return "";
 }
 
+function parseStatusLinksFromPage(bodyText, root, handle) {
+  const items = [];
+  const seen = new Set();
+  const re = /https?:\/\/[^"'\s]+\/status\/\d+/gi;
+  const matches = bodyText.match(re) || [];
+  for (const m of matches) {
+    if (seen.has(m)) continue;
+    seen.add(m);
+    items.push({
+      title: `Post by @${handle}`,
+      description: "",
+      url: m.replace(/#.*/, ""),
+      publishedAt: "",
+      thumbnail: null,
+    });
+    if (items.length >= 30) break;
+  }
+  return items;
+}
+
 export async function onRequest(context) {
   const handle = context?.env?.TWITTER_HANDLE || DEFAULT_HANDLE;
   const hostList =
@@ -112,6 +132,7 @@ export async function onRequest(context) {
     const root = base.replace(/\/+$/, "");
     feedUrls.push(`${root}/${handle}/rss?format=json`);
     feedUrls.push(`${root}/${handle}/rss`);
+    feedUrls.push(`${root}/${handle}`);
   });
 
   const cache = caches.default;
@@ -189,7 +210,27 @@ export async function onRequest(context) {
       await cache.put(cacheKey, response.clone());
       return response;
     } catch {
-      continue;
+      // try next URL
+    }
+
+    if (!feedUrl.endsWith("/rss") && !feedUrl.includes("/rss?")) {
+      try {
+        const pageText = await fetchWithFallback(feedUrl);
+        const scraped = parseStatusLinksFromPage(pageText, feedUrl, handle);
+        if (scraped.length) {
+          const response = new Response(JSON.stringify(scraped), {
+            status: 200,
+            headers: {
+              "Content-Type": "application/json; charset=utf-8",
+              "Cache-Control": "public, max-age=600",
+            },
+          });
+          await cache.put(cacheKey, response.clone());
+          return response;
+        }
+      } catch {
+        // ignore
+      }
     }
   }
 
