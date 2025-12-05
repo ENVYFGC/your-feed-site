@@ -10,8 +10,12 @@ const DEFAULT_HOSTS = [
   "https://nitter.1d4.us",
   "https://nitter.sneed.network",
   "https://nitter.d420.de",
+  "https://nitter.cz",
+  "https://nitter.kavin.rocks",
+  "https://nitter.nohost.network",
+  "https://nitter.privacydev.net",
 ];
-const CACHE_VERSION = "v4";
+const CACHE_VERSION = "v5";
 
 const toCanonicalTweetUrl = (url) => {
   try {
@@ -90,9 +94,8 @@ async function fetchWithFallback(url) {
           "User-Agent": "Mozilla/5.0 (FeedFetcher; +https://envy.xx.kg)",
         },
       });
-      if (!res.ok) continue;
       const text = await res.text();
-      if (text) return text;
+      if (text && text.length) return text;
     } catch {
       continue;
     }
@@ -153,7 +156,19 @@ export async function onRequest(context) {
         const rawItems = parseFeedBody(bodyText);
 
         if (!rawItems.length) {
-          continue;
+          const scraped = parseStatusLinksFromPage(bodyText, feedUrl, handle);
+          if (!scraped.length) {
+            continue;
+          }
+          const response = new Response(JSON.stringify(scraped), {
+            status: 200,
+            headers: {
+              "Content-Type": "application/json; charset=utf-8",
+              "Cache-Control": "public, max-age=600",
+            },
+          });
+          await cache.put(cacheKey, response.clone());
+          return response;
         }
 
         const items = rawItems.map((tweet) => {
