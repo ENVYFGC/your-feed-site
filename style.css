@@ -93,6 +93,15 @@ body {
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.6);
 }
 
+.avatar-img {
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  object-fit: cover;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
 /* Header links */
 
 .header-links {
