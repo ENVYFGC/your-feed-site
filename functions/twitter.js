@@ -2,8 +2,7 @@
 // Fetch Twitter/X feed via Nitter (fallback hosts, JSON or RSS). Returns list.
 
 const DEFAULT_HANDLE = "envy_fgc";
-const DEFAULT_QUERY =
-  "from:envy_fgc (#GGST_SO OR #GGST OR #UNI2 OR #UnderNight) -filter:replies";
+const DEFAULT_QUERY = "from:envy_fgc (#GGST_SO OR #GGST) -filter:replies";
 const DEFAULT_HOSTS = [
   "https://nitter.privacyredirect.com",
   "https://nitter.net",
