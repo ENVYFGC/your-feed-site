@@ -321,31 +321,36 @@ function renderGroups() {
     group.page = Math.min(group.page, pageCount - 1);
     const currentPage = group.page;
 
-    const prev = document.createElement("button");
-    prev.className = "button-ghost";
-    prev.textContent = "Prev";
-    prev.disabled = currentPage === 0;
-    prev.addEventListener("click", () => {
-      groupState[group.def.key].page = Math.max(0, currentPage - 1);
-      renderGroups();
-    });
+    if (pageCount > 1) {
+      const prev = document.createElement("button");
+      prev.className = "button-ghost";
+      prev.textContent = "Prev";
+      prev.disabled = currentPage === 0;
+      prev.addEventListener("click", () => {
+        groupState[group.def.key].page = Math.max(0, currentPage - 1);
+        renderGroups();
+      });
 
-    const next = document.createElement("button");
-    next.className = "button-ghost";
-    next.textContent = "Next";
-    next.disabled = currentPage >= pageCount - 1;
-    next.addEventListener("click", () => {
-      groupState[group.def.key].page = Math.min(pageCount - 1, currentPage + 1);
-      renderGroups();
-    });
+      const next = document.createElement("button");
+      next.className = "button-ghost";
+      next.textContent = "Next";
+      next.disabled = currentPage >= pageCount - 1;
+      next.addEventListener("click", () => {
+        groupState[group.def.key].page = Math.min(
+          pageCount - 1,
+          currentPage + 1
+        );
+        renderGroups();
+      });
 
-    const pageLabel = document.createElement("span");
-    pageLabel.className = "feed-group__page";
-    pageLabel.textContent = `Page ${currentPage + 1} / ${pageCount}`;
+      const pageLabel = document.createElement("span");
+      pageLabel.className = "feed-group__page";
+      pageLabel.textContent = `Page ${currentPage + 1} / ${pageCount}`;
 
-    controls.appendChild(prev);
-    controls.appendChild(pageLabel);
-    controls.appendChild(next);
+      controls.appendChild(prev);
+      controls.appendChild(pageLabel);
+      controls.appendChild(next);
+    }
 
     const list = document.createElement("div");
     list.className = "feed-group__list";
