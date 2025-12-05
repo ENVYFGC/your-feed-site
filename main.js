@@ -6,6 +6,22 @@ const FEED_ERROR = document.getElementById("feed-error");
 // Set footer year
 document.getElementById("year").textContent = new Date().getFullYear();
 
+const PAGE_SIZE = 10;
+const GAME_KEYWORDS = [
+  {
+    key: "ggst",
+    label: "Guilty Gear -Strive-",
+    match: ["ggst", "guilty gear"],
+  },
+  {
+    key: "uni2",
+    label: "Under Night In-Birth II",
+    match: ["uni2", "uni 2", "under night"],
+  },
+];
+const FALLBACK_GAME = { key: "other", label: "Other", match: [] };
+let groupState = {};
+
 function sanitizeExternalUrl(url) {
   return typeof url === "string" && /^https?:\/\//i.test(url) ? url : "#";
 }
@@ -194,7 +210,41 @@ function createFeedCard(item) {
       ? '<span>Watch on YouTube</span> <span>↗</span>'
       : '<span>View on X</span> <span>↗</span>';
 
+  const shareBtn = document.createElement("button");
+  shareBtn.type = "button";
+  shareBtn.className = "button-ghost";
+  shareBtn.textContent = "Share";
+  shareBtn.addEventListener("click", async () => {
+    if (safeUrl === "#") return;
+    const payload = {
+      title: item.title || "Check this out",
+      text: item.description || item.title || "",
+      url: safeUrl,
+    };
+    if (navigator.share) {
+      try {
+        await navigator.share(payload);
+        return;
+      } catch {
+        // fall through to clipboard
+      }
+    }
+    if (navigator.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(safeUrl);
+        shareBtn.textContent = "Copied";
+        setTimeout(() => {
+          shareBtn.textContent = "Share";
+        }, 1200);
+        return;
+      } catch {
+        // ignore
+      }
+    }
+  });
+
   actions.appendChild(link);
+  actions.appendChild(shareBtn);
 
   content.appendChild(meta);
   content.appendChild(title);
@@ -206,6 +256,109 @@ function createFeedCard(item) {
   wrapper.appendChild(inner);
 
   return wrapper;
+}
+
+function detectGame(item) {
+  const haystack = `${item.title || ""} ${item.description || ""}`.toLowerCase();
+  for (const game of GAME_KEYWORDS) {
+    if (game.match.some((m) => haystack.includes(m.toLowerCase()))) {
+      return game.key;
+    }
+  }
+  return FALLBACK_GAME.key;
+}
+
+function buildGroupState(items) {
+  const base = {};
+  [...GAME_KEYWORDS, FALLBACK_GAME].forEach((g) => {
+    base[g.key] = { def: g, items: [], page: 0 };
+  });
+
+  items.forEach((item) => {
+    const key = detectGame(item);
+    if (!base[key]) {
+      base[key] = { def: FALLBACK_GAME, items: [], page: 0 };
+    }
+    base[key].items.push(item);
+  });
+
+  return base;
+}
+
+function renderGroups() {
+  FEED_LIST.innerHTML = "";
+
+  const entries = Object.values(groupState).filter((g) => g.items.length);
+  if (!entries.length) {
+    FEED_ERROR.hidden = false;
+    FEED_ERROR.textContent = "No posts yet — go upload something 🔥";
+    return;
+  }
+
+  entries.forEach((group) => {
+    const section = document.createElement("section");
+    section.className = "feed-group";
+
+    const header = document.createElement("div");
+    header.className = "feed-group__header";
+
+    const title = document.createElement("h3");
+    title.className = "feed-group__title";
+    title.textContent = group.def.label;
+
+    const count = document.createElement("span");
+    count.className = "feed-group__count";
+    count.textContent = `${group.items.length} posts`;
+
+    header.appendChild(title);
+    header.appendChild(count);
+
+    const controls = document.createElement("div");
+    controls.className = "feed-group__controls";
+
+    const pageCount = Math.max(1, Math.ceil(group.items.length / PAGE_SIZE));
+    group.page = Math.min(group.page, pageCount - 1);
+    const currentPage = group.page;
+
+    const prev = document.createElement("button");
+    prev.className = "button-ghost";
+    prev.textContent = "Prev";
+    prev.disabled = currentPage === 0;
+    prev.addEventListener("click", () => {
+      groupState[group.def.key].page = Math.max(0, currentPage - 1);
+      renderGroups();
+    });
+
+    const next = document.createElement("button");
+    next.className = "button-ghost";
+    next.textContent = "Next";
+    next.disabled = currentPage >= pageCount - 1;
+    next.addEventListener("click", () => {
+      groupState[group.def.key].page = Math.min(pageCount - 1, currentPage + 1);
+      renderGroups();
+    });
+
+    const pageLabel = document.createElement("span");
+    pageLabel.className = "feed-group__page";
+    pageLabel.textContent = `Page ${currentPage + 1} / ${pageCount}`;
+
+    controls.appendChild(prev);
+    controls.appendChild(pageLabel);
+    controls.appendChild(next);
+
+    const list = document.createElement("div");
+    list.className = "feed-group__list";
+
+    const start = currentPage * PAGE_SIZE;
+    const end = start + PAGE_SIZE;
+    const slice = group.items.slice(start, end);
+    slice.forEach((item) => list.appendChild(createFeedCard(item)));
+
+    section.appendChild(header);
+    section.appendChild(controls);
+    section.appendChild(list);
+    FEED_LIST.appendChild(section);
+  });
 }
 
 async function loadFeed() {
@@ -224,15 +377,9 @@ async function loadFeed() {
 
     FEED_LOADING.hidden = true;
 
-    if (!combined.length) {
-      FEED_ERROR.hidden = false;
-      FEED_ERROR.textContent = "No posts yet — go upload something 🔥";
-      return;
-    }
-
-    combined.forEach((item) => {
-      FEED_LIST.appendChild(createFeedCard(item));
-    });
+    groupState = buildGroupState(combined);
+    FEED_ERROR.hidden = true;
+    renderGroups();
   } catch (err) {
     console.error(err);
     FEED_LOADING.hidden = true;
