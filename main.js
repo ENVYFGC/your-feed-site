@@ -6,6 +6,51 @@ const FEED_ERROR = document.getElementById("feed-error");
 // Set footer year
 document.getElementById("year").textContent = new Date().getFullYear();
 
+function sanitizeExternalUrl(url) {
+  return typeof url === "string" && /^https?:\/\//i.test(url) ? url : "#";
+}
+
+function getYouTubeEmbedUrl(url) {
+  try {
+    const u = new URL(url);
+    if (!/^https?:$/.test(u.protocol)) return "";
+
+    let id = "";
+    const host = u.hostname.toLowerCase();
+    const path = u.pathname;
+
+    if (host.includes("youtu.be")) {
+      id = path.slice(1);
+    } else if (host.includes("youtube.com")) {
+      if (path.startsWith("/shorts/") || path.startsWith("/embed/")) {
+        id = path.split("/")[2] || "";
+      } else {
+        id = new URLSearchParams(u.search).get("v") || "";
+      }
+    }
+
+    return id ? `https://www.youtube.com/embed/${id}` : "";
+  } catch {
+    return "";
+  }
+}
+
+function getTwitterEmbedUrl(url) {
+  try {
+    const u = new URL(url);
+    if (!/^https?:$/.test(u.protocol)) return "";
+    u.protocol = "https:";
+    if (u.hostname.includes("nitter")) {
+      u.hostname = "x.com";
+    }
+    const host = u.hostname.toLowerCase();
+    if (!host.endsWith("twitter.com") && !host.endsWith("x.com")) return "";
+    return `https://twitframe.com/show?url=${encodeURIComponent(u.href)}`;
+  } catch {
+    return "";
+  }
+}
+
 /**
  * Fetch JSON helper
  */
@@ -43,6 +88,8 @@ function createFeedCard(item) {
 
   const inner = document.createElement("div");
   inner.className = "feed-card-inner";
+
+  const safeUrl = sanitizeExternalUrl(item.url);
 
   // Thumbnail
   if (item.thumbnail) {
@@ -102,15 +149,42 @@ function createFeedCard(item) {
     desc.textContent = item.description;
   }
 
+  // Embed (best-effort)
+  let embed;
+  if (item.source === "youtube") {
+    const embedUrl = getYouTubeEmbedUrl(safeUrl);
+    if (embedUrl) {
+      embed = document.createElement("div");
+      embed.className = "feed-embed feed-embed--video";
+      const iframe = document.createElement("iframe");
+      iframe.src = embedUrl;
+      iframe.title = item.title || "YouTube video";
+      iframe.allow =
+        "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share";
+      iframe.allowFullscreen = true;
+      iframe.loading = "lazy";
+      iframe.referrerPolicy = "strict-origin-when-cross-origin";
+      embed.appendChild(iframe);
+    }
+  } else if (item.source === "twitter") {
+    const embedUrl = getTwitterEmbedUrl(safeUrl);
+    if (embedUrl) {
+      embed = document.createElement("div");
+      embed.className = "feed-embed feed-embed--tweet";
+      const iframe = document.createElement("iframe");
+      iframe.src = embedUrl;
+      iframe.title = "Tweet embed";
+      iframe.loading = "lazy";
+      iframe.referrerPolicy = "no-referrer-when-downgrade";
+      embed.appendChild(iframe);
+    }
+  }
+
   // Actions
   const actions = document.createElement("div");
   actions.className = "feed-actions";
 
   const link = document.createElement("a");
-  const safeUrl =
-    typeof item.url === "string" && /^https?:\/\//i.test(item.url)
-      ? item.url
-      : "#";
   link.href = safeUrl;
   link.target = "_blank";
   link.rel = "noopener";
@@ -125,6 +199,7 @@ function createFeedCard(item) {
   content.appendChild(meta);
   content.appendChild(title);
   if (desc) content.appendChild(desc);
+  if (embed) content.appendChild(embed);
   content.appendChild(actions);
 
   inner.appendChild(content);

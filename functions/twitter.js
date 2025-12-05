@@ -1,5 +1,23 @@
 // /functions/twitter.js
 
+const toCanonicalTweetUrl = (url) => {
+  try {
+    const u = new URL(url);
+    if (!/^https?:$/.test(u.protocol)) return "";
+    u.protocol = "https:";
+    if (u.hostname.includes("nitter")) {
+      u.hostname = "x.com";
+    }
+    const host = u.hostname.toLowerCase();
+    if (!host.endsWith("twitter.com") && !host.endsWith("x.com")) {
+      return "";
+    }
+    return u.href;
+  } catch {
+    return "";
+  }
+};
+
 export async function onRequest(context) {
   const TWITTER_FEED_URL =
     "https://nitter.privacyredirect.com/envy_fgc/rss?format=json";
@@ -61,7 +79,8 @@ export async function onRequest(context) {
         tweet.summary ||
         "";
 
-      const url = tweet.url || tweet.link || tweet.permalink || "";
+      const rawUrl = tweet.url || tweet.link || tweet.permalink || "";
+      const url = toCanonicalTweetUrl(rawUrl) || rawUrl;
 
       const publishedAt =
         tweet.published ||
