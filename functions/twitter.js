@@ -1,9 +1,17 @@
 // /functions/twitter.js
+// Fetch Twitter/X feed via Nitter (fallback hosts, JSON or RSS). Returns list.
+
+const DEFAULT_HANDLE = "envy_fgc";
+const DEFAULT_HOSTS = [
+  "https://nitter.privacyredirect.com",
+  "https://nitter.net",
+  "https://nitter.fly.dev",
+];
 
 const toCanonicalTweetUrl = (url) => {
   try {
     const u = new URL(url);
-    if (!/^https?:$/.test(u.protocol)) return "";
+    if (!/^https?:\/\//.test(u.protocol)) return "";
     u.protocol = "https:";
     if (u.hostname.includes("nitter")) {
       u.hostname = "x.com";
@@ -18,109 +26,143 @@ const toCanonicalTweetUrl = (url) => {
   }
 };
 
-export async function onRequest(context) {
-  const TWITTER_FEED_URL =
-    "https://nitter.privacyredirect.com/envy_fgc/rss?format=json";
-
-  if (!TWITTER_FEED_URL) {
-    return new Response("[]", {
-      status: 200,
-      headers: { "Content-Type": "application/json; charset=utf-8" },
-    });
-  }
-
+function parseFeedBody(body) {
   try {
-    const cache = caches.default;
-    const cacheKey = new Request(
-      `https://feed.local/twitter?src=${encodeURIComponent(TWITTER_FEED_URL)}`
-    );
-    const cached = await cache.match(cacheKey);
-
-    if (cached) {
-      return cached;
-    }
-
-    const res = await fetch(TWITTER_FEED_URL);
-
-    if (!res.ok) {
-      return new Response("[]", {
-        status: 200,
-        headers: { "Content-Type": "application/json; charset=utf-8" },
-      });
-    }
-
-    let data;
-    try {
-      data = await res.json();
-    } catch (e) {
-      return new Response("[]", {
-        status: 200,
-        headers: { "Content-Type": "application/json; charset=utf-8" },
-      });
-    }
-
+    const data = JSON.parse(body);
     const rawItems = Array.isArray(data?.items)
       ? data.items
       : Array.isArray(data)
       ? data
       : [];
+    if (rawItems.length) return rawItems;
+  } catch {
+    // ignore
+  }
 
-    const items = rawItems.map((tweet) => {
-      const title =
-        tweet.title ||
-        tweet.text ||
-        (tweet.description || "").slice(0, 80) ||
-        "Tweet";
+  const items = [];
+  const itemRegex = /<item>([\s\S]*?)<\/item>/gi;
+  let match;
+  const stripTags = (str) => str.replace(/<[^>]+>/g, "").trim();
 
-      const description =
-        tweet.text ||
-        tweet.description ||
-        tweet.content ||
-        tweet.summary ||
-        "";
+  while ((match = itemRegex.exec(body)) !== null) {
+    const entry = match[1];
+    const getTag = (tag) => {
+      const m = entry.match(
+        new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, "i")
+      );
+      return m ? stripTags(m[1]) : "";
+    };
 
-      const rawUrl = tweet.url || tweet.link || tweet.permalink || "";
-      const url = toCanonicalTweetUrl(rawUrl) || rawUrl;
+    const title = getTag("title") || getTag("description") || "Tweet";
+    const description = getTag("description") || "";
+    const url = getTag("link") || "";
+    const publishedAt = getTag("pubDate") || getTag("date") || getTag("updated");
+    const enclosureMatch = entry.match(/<enclosure[^>]*url="([^"]+)"/i);
+    const thumbnail = enclosureMatch ? enclosureMatch[1] : null;
 
-      const publishedAt =
-        tweet.published ||
-        tweet.pubDate ||
-        tweet.date ||
-        tweet.created_at ||
-        "";
-
-      const thumbnail =
-        tweet.thumbnail ||
-        tweet.image ||
-        (tweet.enclosure && tweet.enclosure.url) ||
-        null;
-
-      return {
-        source: "twitter",
-        title,
-        description,
-        url,
-        thumbnail,
-        publishedAt,
-      };
-    });
-
-    const body = JSON.stringify(items);
-
-    const response = new Response(body, {
-      status: 200,
-      headers: {
-        "Content-Type": "application/json; charset=utf-8",
-        "Cache-Control": "public, max-age=900",
-      },
-    });
-
-    await cache.put(cacheKey, response.clone());
-    return response;
-  } catch (err) {
-    return new Response("[]", {
-      status: 200,
-      headers: { "Content-Type": "application/json; charset=utf-8" },
+    items.push({
+      title,
+      description,
+      url,
+      publishedAt,
+      thumbnail,
     });
   }
+
+  return items;
+}
+
+export async function onRequest(context) {
+  const handle = context?.env?.TWITTER_HANDLE || DEFAULT_HANDLE;
+  const hostList =
+    (context?.env?.NITTER_HOSTS &&
+      context.env.NITTER_HOSTS.split(",").map((s) => s.trim()).filter(Boolean)) ||
+    DEFAULT_HOSTS;
+
+  const feedUrls = [];
+  hostList.forEach((base) => {
+    const root = base.replace(/\/+$/, "");
+    feedUrls.push(`${root}/${handle}/rss?format=json`);
+    feedUrls.push(`${root}/${handle}/rss`);
+  });
+
+  const cache = caches.default;
+
+  for (const feedUrl of feedUrls) {
+    const cacheKey = new Request(
+      `https://feed.local/twitter?src=${encodeURIComponent(feedUrl)}`
+    );
+    const cached = await cache.match(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
+    try {
+      const res = await fetch(feedUrl);
+      if (!res.ok) continue;
+      const bodyText = await res.text();
+      const rawItems = parseFeedBody(bodyText);
+
+      const items = rawItems.map((tweet) => {
+        const title =
+          tweet.title ||
+          tweet.text ||
+          (tweet.description || "").slice(0, 80) ||
+          "Tweet";
+
+        const description =
+          tweet.text ||
+          tweet.description ||
+          tweet.content ||
+          tweet.summary ||
+          "";
+
+        const rawUrl = tweet.url || tweet.link || tweet.permalink || "";
+        const url = toCanonicalTweetUrl(rawUrl) || rawUrl;
+
+        const publishedAt =
+          tweet.published ||
+          tweet.pubDate ||
+          tweet.date ||
+          tweet.created_at ||
+          tweet.publishedAt ||
+          tweet.updated ||
+          "";
+
+        const thumbnail =
+          tweet.thumbnail ||
+          tweet.image ||
+          (tweet.enclosure && tweet.enclosure.url) ||
+          tweet.media ||
+          null;
+
+        return {
+          source: "twitter",
+          title,
+          description,
+          url,
+          thumbnail,
+          publishedAt,
+        };
+      });
+
+      const response = new Response(JSON.stringify(items), {
+        status: 200,
+        headers: {
+          "Content-Type": "application/json; charset=utf-8",
+          "Cache-Control": "public, max-age=900",
+        },
+      });
+
+      await cache.put(cacheKey, response.clone());
+      return response;
+    } catch {
+      continue;
+    }
+  }
+
+  return new Response("[]", {
+    status: 200,
+    headers: { "Content-Type": "application/json; charset=utf-8" },
+  });
 }
